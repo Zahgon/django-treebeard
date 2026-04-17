@@ -74,31 +74,7 @@ class Node(models.Model):
 
         :returns: A list of the added node PKs.
         """
-
-        # tree, iterative preorder
-        added = []
-        # stack of nodes to analyze
-        stack = [(parent, node) for node in bulk_data[::-1]]
-        foreign_key_fields = {field.name for field in cls._meta.fields if (field.one_to_one or field.many_to_one)}
-        pk_field = cls._meta.pk.attname
-
-        while stack:
-            parent, node_struct = stack.pop()
-            # shallow copy of the data structure so it doesn't persist...
-            node_data = node_struct["data"].copy()
-            for field in foreign_key_fields:
-                # Append _id to field name, so that we don't need to load the foreign objects into memory
-                node_data[f"{field}_id"] = node_data.pop(field, None)
-            if keep_ids:
-                node_data["pk"] = node_struct[pk_field]
-
-            node_obj = parent.add_child(**node_data) if parent else cls.add_root(**node_data)
-            added.append(node_obj.pk)
-            if "children" in node_struct:
-                # extending the stack with the current node as the parent of
-                # the new nodes
-                stack.extend([(node_obj, node) for node in node_struct["children"][::-1]])
-        return added
+        pass
 
     @classmethod
     def dump_bulk(cls, parent=None, keep_ids=True):  # pragma: no cover
@@ -132,7 +108,7 @@ class Node(models.Model):
 
             The first root node in the tree or ``None`` if it is empty.
         """
-        return cls.get_root_nodes().first()
+        pass
 
     @classmethod
     def get_last_root_node(cls):
@@ -141,7 +117,7 @@ class Node(models.Model):
 
             The last root node in the tree or ``None`` if it is empty.
         """
-        return cls.get_root_nodes().last()
+        pass
 
     @classmethod
     def find_problems(cls, parent=None):  # pragma: no cover
@@ -188,14 +164,7 @@ class Node(models.Model):
             A `list` (**NOT** a Queryset) of node objects with an extra
             attribute: `descendants_count`.
         """
-        if parent is None:
-            qset = cls.get_root_nodes()
-        else:
-            qset = parent.get_children()
-        nodes = list(qset)
-        for node in nodes:
-            node.descendants_count = node.get_descendant_count()
-        return nodes
+        pass
 
     def get_depth(self):  # pragma: no cover
         """:returns: the depth (level) of the node"""
@@ -216,7 +185,7 @@ class Node(models.Model):
 
     def get_children_count(self):
         """:returns: The number of the node's children"""
-        return self.get_children().count()
+        pass
 
     def get_descendants(self):
         """
@@ -229,7 +198,7 @@ class Node(models.Model):
 
     def get_descendant_count(self):
         """:returns: the number of descendants of a node."""
-        return self.get_descendants().count()
+        pass
 
     def get_first_child(self):
         """
@@ -237,7 +206,7 @@ class Node(models.Model):
 
             The leftmost node's child, or None if it has no children.
         """
-        return self.get_children().first()
+        pass
 
     def get_last_child(self):
         """
@@ -245,7 +214,7 @@ class Node(models.Model):
 
             The rightmost node's child, or None if it has no children.
         """
-        return self.get_children().last()
+        pass
 
     def get_first_sibling(self):
         """
@@ -254,7 +223,7 @@ class Node(models.Model):
             The leftmost node's sibling, can return the node itself if
             it was the leftmost sibling.
         """
-        return self.get_siblings().first()
+        pass
 
     def get_last_sibling(self):
         """
@@ -263,7 +232,7 @@ class Node(models.Model):
             The rightmost node's sibling, can return the node itself if
             it was the rightmost sibling.
         """
-        return self.get_siblings().last()
+        pass
 
     def get_prev_sibling(self):
         """
@@ -272,10 +241,7 @@ class Node(models.Model):
             The previous node's sibling, or None if it was the leftmost
             sibling.
         """
-        ids = list(self.get_siblings().values_list("pk", flat=True))
-        idx = ids.index(self.pk)
-        if idx > 0:
-            return self.get_siblings().get(pk=ids[idx - 1])
+        pass
 
     def get_next_sibling(self):
         """
@@ -284,10 +250,7 @@ class Node(models.Model):
             The next node's sibling, or None if it was the rightmost
             sibling.
         """
-        ids = list(self.get_siblings().values_list("pk", flat=True))
-        idx = ids.index(self.pk)
-        if idx < len(ids) - 1:
-            return self.get_siblings().get(pk=ids[idx + 1])
+        pass
 
     def is_sibling_of(self, node):
         """
@@ -298,7 +261,7 @@ class Node(models.Model):
 
             The node that will be checked as a sibling
         """
-        return self.get_siblings().filter(pk=node.pk).exists()
+        pass
 
     def is_child_of(self, node):
         """
@@ -309,7 +272,7 @@ class Node(models.Model):
 
             The node that will be checked as a parent
         """
-        return node.get_children().filter(pk=self.pk).exists()
+        pass
 
     def is_descendant_of(self, node):  # pragma: no cover
         """
@@ -468,40 +431,19 @@ class Node(models.Model):
 
     def delete(self, *args, **kwargs):
         """Removes a node and all it's descendants."""
-        return self.__class__.objects.filter(pk=self.pk).delete(*args, **kwargs)
+        pass
 
     delete.alters_data = True
     delete.queryset_only = True
 
-    def _prepare_pos_var(self, pos, method_name, valid_pos, valid_sorted_pos):
-        if pos is None:
-            if self.node_order_by:
-                pos = "sorted-sibling"
-            else:
-                pos = "last-sibling"
-        if pos not in valid_pos:
-            raise InvalidPosition(f"Invalid relative position: {pos}")
-        if self.node_order_by and pos not in valid_sorted_pos:
-            raise InvalidPosition(
-                f"Must use {' or '.join(valid_sorted_pos)} in {method_name} when node_order_by is enabled"
-            )
-        if pos in valid_sorted_pos and not self.node_order_by:
-            raise MissingNodeOrderBy("Missing node_order_by attribute.")
-        return pos
 
     _valid_pos_for_add_sibling = ("first-sibling", "left", "right", "last-sibling", "sorted-sibling")
     _valid_pos_for_sorted_add_sibling = ("sorted-sibling",)
 
-    def _prepare_pos_var_for_add_sibling(self, pos):
-        return self._prepare_pos_var(
-            pos, "add_sibling", self._valid_pos_for_add_sibling, self._valid_pos_for_sorted_add_sibling
-        )
 
     _valid_pos_for_move = _valid_pos_for_add_sibling + ("first-child", "last-child", "sorted-child")
     _valid_pos_for_sorted_move = _valid_pos_for_sorted_add_sibling + ("sorted-child",)
 
-    def _prepare_pos_var_for_move(self, pos):
-        return self._prepare_pos_var(pos, "move", self._valid_pos_for_move, self._valid_pos_for_sorted_move)
 
     def get_sorted_pos_queryset(self, siblings, newobj):
         """
@@ -514,40 +456,9 @@ class Node(models.Model):
         (MIT licensed) by Jonathan Buchanan:
         https://github.com/django-mptt/django-mptt/blob/0.3.0/mptt/signals.py
         """
+        pass
 
-        fields, filters = [], []
-        for field in self.node_order_by:
-            comparator = "gt"
-            if field.startswith("-"):
-                field = field[1:]
-                comparator = "lt"
 
-            value = getattr(newobj, field)
-            if value is None:
-                warnings.warn(
-                    f"Received a null value for field '{field}', which is used "
-                    f"by '{self.__class__.__name__}.node_order_by'. "
-                    "This field will be ignored when sorting the object.",
-                    category=RuntimeWarning,
-                )
-                continue
-
-            filters.append(Q(*[Q(**{f: v}) for f, v in fields] + [Q(**{f"{field}__{comparator}": value})]))
-            fields.append((field, value))
-
-        if not filters:
-            return siblings
-
-        return siblings.filter(reduce(operator.or_, filters))
-
-    def _clear_cached_attributes(self):
-        for attr in self._cached_attributes:
-            with suppress(AttributeError):
-                delattr(self, attr)
-
-    def refresh_from_db(self, *args, **kwargs):
-        super().refresh_from_db(*args, **kwargs)
-        self._clear_cached_attributes()
 
     @classmethod
     def get_annotated_list_qs(cls, qs):
@@ -559,26 +470,7 @@ class Node(models.Model):
         a branch of a tree: excluded objects will not be fetched and will
         result in gaps in the tree.
         """
-        result, info = [], {}
-        start_depth, prev_depth = (None, None)
-        for node in qs:
-            depth = node.get_depth()
-            if start_depth is None:
-                start_depth = depth
-            open = depth and (prev_depth is None or depth > prev_depth)
-            if prev_depth is not None and depth < prev_depth:
-                info["close"] = list(range(0, prev_depth - depth))
-            info = {"open": open, "close": [], "level": depth - start_depth}
-            result.append(
-                (
-                    node,
-                    info,
-                )
-            )
-            prev_depth = depth
-        if start_depth and start_depth > 0:
-            info["close"] = list(range(0, prev_depth - start_depth + 1))
-        return result
+        pass
 
     @classmethod
     def get_annotated_list(cls, parent=None, max_depth=None):
@@ -595,10 +487,7 @@ class Node(models.Model):
 
             Optionally limit to specified depth
         """
-        qs = cls.get_tree(parent)
-        if max_depth:
-            qs = qs.filter(depth__lte=max_depth)
-        return cls.get_annotated_list_qs(qs)
+        pass
 
     @classmethod
     @cache

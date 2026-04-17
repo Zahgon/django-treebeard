@@ -14,11 +14,7 @@ class AL_NodeManager(models.Manager):
 
     def get_queryset(self):
         """Sets the custom queryset as the default."""
-        if self.model.node_order_by:
-            order_by = ["parent"] + list(self.model.node_order_by)
-        else:
-            order_by = ["parent", "sib_order"]
-        return super().get_queryset().order_by(*order_by)
+        pass
 
 
 class AL_Node(Node):
@@ -39,21 +35,7 @@ class AL_Node(Node):
     @transaction.atomic
     def add_root(cls, **kwargs):
         """Adds a root node to the tree."""
-
-        if len(kwargs) == 1 and "instance" in kwargs:
-            # adding the passed (unsaved) instance to the tree
-            newobj = kwargs["instance"]
-            if not newobj._state.adding:
-                raise NodeAlreadySaved("Attempted to add a tree node that is already in the database")
-        else:
-            newobj = cls(**kwargs)
-
-        newobj._cached_depth = 1
-        if not cls.node_order_by:
-            max = cls.tree_model().objects.filter(parent=None).aggregate(max=Max("sib_order"))["max"] or 0
-            newobj.sib_order = max + 1
-        newobj.save()
-        return newobj
+        pass
 
     @classmethod
     def get_root_nodes(cls):
@@ -120,86 +102,29 @@ class AL_Node(Node):
 
     def get_root(self):
         """:returns: the root node for the current node object."""
-        ancestors = self.get_ancestors()
-        if ancestors:
-            return ancestors[0]
-        return self
+        pass
 
     def is_root(self):
         return self.parent_id is None
 
-    def is_sibling_of(self, node):
-        return self.parent_id == node.parent_id
 
-    def is_child_of(self, node):
-        return self.parent_id == node.pk
 
     def is_descendant_of(self, node):
         """
         :returns: ``True`` if the node if a descendant of another node given
             as an argument, else, returns ``False``
         """
-        return self.pk in (obj.pk for obj in node.get_descendants())
+        pass
 
     @classmethod
     def dump_bulk(cls, parent=None, keep_ids=True):
         """Dumps a tree branch to a python data structure."""
-
-        # a list of nodes: not really a queryset, but it works
-        objs = cls.get_tree(parent)
-
-        ret, lnk = [], {}
-        pk_field = cls._meta.pk.attname
-        for node, pyobj in zip(objs, serializers.serialize("python", objs)):
-            depth = node.get_depth()
-            # django's serializer stores the attributes in 'fields'
-            fields = pyobj["fields"]
-            del fields["parent"]
-
-            # non-sorted trees have this
-            if "sib_order" in fields:
-                del fields["sib_order"]
-
-            if pk_field in fields:
-                del fields[pk_field]
-
-            newobj = {"data": fields}
-            if keep_ids:
-                newobj[pk_field] = pyobj["pk"]
-
-            if (not parent and depth == 1) or (parent and depth == parent.get_depth()):
-                ret.append(newobj)
-            else:
-                parentobj = lnk[node.parent_id]
-                if "children" not in parentobj:
-                    parentobj["children"] = []
-                parentobj["children"].append(newobj)
-            lnk[node.pk] = newobj
-        return ret
+        pass
 
     @transaction.atomic
     def add_child(self, **kwargs):
         """Adds a child to the node."""
-        cls = self.tree_model()
-
-        if len(kwargs) == 1 and "instance" in kwargs:
-            # adding the passed (unsaved) instance to the tree
-            newobj = kwargs["instance"]
-            if not newobj._state.adding:
-                raise NodeAlreadySaved("Attempted to add a tree node that is already in the database")
-        else:
-            newobj = cls(**kwargs)
-
-        try:
-            newobj._cached_depth = self._cached_depth + 1
-        except AttributeError:
-            pass
-        if not cls.node_order_by:
-            max = cls.objects.filter(parent=self).aggregate(max=Max("sib_order"))["max"] or 0
-            newobj.sib_order = max + 1
-        newobj.parent = self
-        newobj.save()
-        return newobj
+        pass
 
     @classmethod
     def _get_tree_recursively(cls, results, parent, depth):
@@ -242,69 +167,24 @@ class AL_Node(Node):
 
     def get_descendant_count(self):
         """:returns: the number of descendants of a node"""
-        return len(self.get_descendants())
+        pass
 
     def get_siblings(self):
         """
         :returns: A queryset of all the node's siblings, including the node
             itself.
         """
-        if self.parent_id:
-            return self.tree_model().objects.filter(parent_id=self.parent_id)
-        return self.__class__.get_root_nodes()
+        pass
 
-    def get_prev_sibling(self):
-        return self.get_siblings().filter(sib_order__lt=self.sib_order).last()
 
-    def get_next_sibling(self):
-        return self.get_siblings().filter(sib_order__gt=self.sib_order).first()
 
     @transaction.atomic
     def add_sibling(self, pos=None, **kwargs):
         """Adds a new node as a sibling to the current node object."""
-        pos = self._prepare_pos_var_for_add_sibling(pos)
+        pass
 
-        if len(kwargs) == 1 and "instance" in kwargs:
-            # adding the passed (unsaved) instance to the tree
-            newobj = kwargs["instance"]
-            if not newobj._state.adding:
-                raise NodeAlreadySaved("Attempted to add a tree node that is already in the database")
-        else:
-            # creating a new object
-            newobj = self.tree_model()(**kwargs)
 
-        if not self.node_order_by:
-            newobj.sib_order = self.__class__._get_new_sibling_order(pos, self)
-        newobj.parent_id = self.parent_id
-        newobj.save()
-        return newobj
 
-    @classmethod
-    def _is_target_pos_the_last_sibling(cls, pos, target):
-        return pos == "last-sibling" or (pos == "right" and target == target.get_last_sibling())
-
-    @classmethod
-    def _make_hole_and_get_sibling_order(cls, pos, target_node):
-        siblings = target_node.get_siblings()
-        siblings = {
-            "left": siblings.filter(sib_order__gte=target_node.sib_order),
-            "right": siblings.filter(sib_order__gt=target_node.sib_order),
-            "first-sibling": siblings,
-        }[pos]
-        sib_order = {"left": target_node.sib_order, "right": target_node.sib_order + 1, "first-sibling": 1}[pos]
-        min = siblings.aggregate(min=Min("sib_order"))["min"] or 0
-        if min:
-            cls.tree_model().objects.filter(sib_order__gte=min, parent_id=target_node.parent_id).update(
-                sib_order=models.F("sib_order") + 1
-            )
-        return sib_order
-
-    @classmethod
-    def _get_new_sibling_order(cls, pos, target_node):
-        if cls._is_target_pos_the_last_sibling(pos, target_node):
-            return target_node.get_last_sibling().sib_order + 1
-
-        return cls._make_hole_and_get_sibling_order(pos, target_node)
 
     @transaction.atomic
     def move(self, target, pos=None):
@@ -312,46 +192,7 @@ class AL_Node(Node):
         Moves the current node and all it's descendants to a new position
         relative to another node.
         """
-
-        pos = self._prepare_pos_var_for_move(pos)
-
-        sib_order = None
-        parent = None
-
-        if pos in ("first-child", "last-child", "sorted-child"):
-            if self == target:
-                raise InvalidMoveToDescendant(_("Can't move node to itself."))
-
-            # moving to a child
-            if not target.is_leaf():
-                target = target.get_last_child()
-                pos = {"first-child": "first-sibling", "last-child": "last-sibling", "sorted-child": "sorted-sibling"}[
-                    pos
-                ]
-            else:
-                parent = target
-                if pos == "sorted-child":
-                    pos = "sorted-sibling"
-                else:
-                    pos = "first-sibling"
-                    sib_order = 1
-
-        if target.is_descendant_of(self):
-            raise InvalidMoveToDescendant(_("Can't move node to a descendant."))
-
-        if self == target and (
-            (pos == "left")
-            or (pos in ("right", "last-sibling") and target == target.get_last_sibling())
-            or (pos == "first-sibling" and target == target.get_first_sibling())
-        ):
-            # special cases, not actually moving the node, so nothing to do
-            return
-
-        self.parent = parent or target.parent
-        if pos != "sorted-sibling":  # sorted-sibling delegates to node_order_by
-            self.sib_order = sib_order or self.__class__._get_new_sibling_order(pos, target)
-
-        self.save()
+        pass
 
     class Meta:
         """Abstract model."""

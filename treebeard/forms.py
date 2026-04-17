@@ -20,12 +20,7 @@ class TreeNodeChoiceField(forms.ModelChoiceField):
 
     DEPTH_SEPARATOR = mark_safe("&nbsp;&nbsp;&nbsp;&nbsp;")
 
-    def _get_indent(self, obj):
-        return mark_safe(conditional_escape(self.DEPTH_SEPARATOR) * (obj.get_depth() - 1))
 
-    def label_from_instance(self, obj):
-        label = super().label_from_instance(obj)
-        return mark_safe(conditional_escape(self._get_indent(obj)) + conditional_escape(label))
 
 
 class MoveNodeForm(forms.ModelForm):
@@ -75,22 +70,6 @@ class MoveNodeForm(forms.ModelForm):
         queryset=None,  # Populated in __init__
     )
 
-    def _get_initial(self, instance):
-        if self.is_sorted:
-            position = "sorted-child"
-            ref_node = instance.get_parent()
-        else:
-            prev_sibling = instance.get_prev_sibling()
-            if prev_sibling:
-                position = "right"
-                ref_node = prev_sibling
-            else:
-                position = "first-child"
-                if instance.is_root():
-                    ref_node = None
-                else:
-                    ref_node = instance.get_parent()
-        return {"treebeard_ref_node": ref_node, "treebeard_position": position}
 
     def _set_ref_model_queryset(self, opts, instance):
         """
@@ -101,27 +80,7 @@ class MoveNodeForm(forms.ModelForm):
 
         Excludes the instance and its descendants since a move relative to those would be invalid
         """
-        if issubclass(opts.model, AL_Node):
-            choices = opts.model.get_tree()
-            descendants = instance.get_descendants(include_self=True) if instance else []
-            field = self.fields["treebeard_ref_node"]
-            self.fields["treebeard_ref_node"]._choices = [("", "--------")] + [
-                (field.prepare_value(node), field.label_from_instance(node))
-                for node in choices
-                if node not in descendants
-            ]
-            # Must set queryset so that the manually defined choices are valid.
-            # Must also do this *after* setting _choices above, otherwise the setter
-            # for queryset will overwrite the choices.
-            self.fields["treebeard_ref_node"].queryset = opts.model.objects.all()
-            return
-
-        queryset = opts.model.get_tree()
-        descendants = instance.get_descendants(include_self=True) if instance else None
-        if descendants:
-            queryset = queryset.exclude(pk__in=descendants.values_list("pk", flat=True))
-
-        self.fields["treebeard_ref_node"].queryset = queryset
+        pass
 
     def __init__(self, *args, initial=None, instance=None, **kwargs):
         opts = self._meta
@@ -156,27 +115,7 @@ class MoveNodeForm(forms.ModelForm):
         TreeAdmin handles this by rolling back the entire transaction if the form or any
         inlines report an error. If you use this form elsewhere, you will need to do the same.
         """
-
-        reference_node = self.cleaned_data.pop("treebeard_ref_node", None)
-        position_type = self.cleaned_data.pop("treebeard_position")
-
-        if self.instance._state.adding:
-            if reference_node:
-                self.instance = reference_node.add_child(instance=self.instance)
-                self.instance.move(reference_node, pos=position_type)
-            else:
-                self.instance = self._meta.model.add_root(instance=self.instance)
-        else:
-            self.instance.save()
-            if reference_node:
-                self.instance.move(reference_node, pos=position_type)
-            else:
-                pos = "sorted-sibling" if self.is_sorted else "first-sibling"
-                self.instance.move(self._meta.model.get_first_root_node(), pos)
-        # Reload the instance
-        self.instance.refresh_from_db()
-        super().save(commit=commit)
-        return self.instance
+        pass
 
 
 def movenodeform_factory(model, form=MoveNodeForm, exclude=None, **kwargs):

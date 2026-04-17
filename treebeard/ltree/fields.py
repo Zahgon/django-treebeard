@@ -65,48 +65,12 @@ class PathFormField(forms.CharField):
 class PathField(TextField):
     default_validators = [path_label_validator]
 
-    def db_type(self, connection):
-        return "ltree"
 
-    def formfield(self, **kwargs):
-        kwargs["form_class"] = PathFormField
-        kwargs["widget"] = TextInput(attrs={"class": "vTextField"})
-        return super().formfield(**kwargs)
 
-    def contribute_to_class(self, cls, name, private_only=False):
-        super().contribute_to_class(cls, name)
-        setattr(cls, self.name, PathValueProxy(self.name))
 
-    def from_db_value(self, value, expression, connection, *args):
-        if value is None:
-            return value
-        return PathValue(value)
 
-    def get_prep_value(self, value):
-        if value is None:
-            return value
-        return str(PathValue(value))
 
-    def to_python(self, value):
-        if value is None:
-            return value
 
-        if isinstance(value, PathValue):
-            return value
-
-        return PathValue(value)
-
-    def get_db_prep_value(self, value, connection, prepared=False):
-        if value is None:
-            return value
-
-        if isinstance(value, PathValue):
-            return str(value)
-
-        if isinstance(value, (list, str)):
-            return str(PathValue(value))
-
-        raise ValueError(f"Unknown value type {type(value)}")
 
 
 @PathField.register_lookup

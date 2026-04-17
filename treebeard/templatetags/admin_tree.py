@@ -11,9 +11,6 @@ def _get_parent_id(node):
     return node.get_parent().pk
 
 
-@register.inclusion_tag("admin/change_list_results.html")
-def result_tree(cl):
-    return result_list(cl)
 
 
 @register.simple_tag
